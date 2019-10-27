@@ -1,5 +1,6 @@
 import constants as c
 import socket
+from select import select
 from cv2 import VideoCapture
 from time import sleep
 from math import ceil
@@ -17,7 +18,7 @@ class Publisher:
 
         self.camera = VideoCapture(0)
 
-        # keeps track of the ip addresses
+        # keeps track of ip addresses
         self.subscribers = []
     
     def generateImage(self):
@@ -29,27 +30,28 @@ class Publisher:
         # frame = frame.compress()
         return frame;
 
-    def createPacket(self, type):
-        payload = f"{c.PUBLISHER}  {type}  "
-        if type == "TOPIC_REGISTRATION":
+    def createPacket(self, type, payload):
+        payload = f""
+        if type == c.TOPIC_INFO:
             payload += f"{[self.topic, self.port]}"
         else:
-            payload += f"{self.generateImage()}"
+            payload += f"{payload}"
         utfPayload = payload.encode()
         hash = c.generateHash(utfPayload)
         return hash + utfPayload
 
     def sendImage(self, image):
         # numPackets = image.size/capacity
-        imagePacket = self.createPacket("IMAGE")
+        # self.generateImage()
+        imagePacket = self.createPacket(c.IMAGE, "") #replace "" with spliced image payloads
 
-    def sendTopicRegistration(self, topic, port):
-        registerTopicPacket = self.createPacket("TOPIC_REGISTRATION")
+    def sendTopic(self, topic, port):
+        registerTopicPacket = self.createPacket(c.TOPIC_INFO, "")
         self.controlSocket.sendto(registerTopicPacket, ('<broadcast>', c.CONTROL_PLANE_PORT))
 
     def start(self):
         for i in range(c.RETRY_POLICY):
-            self.sendTopicRegistration(self.topic, self.port)
+            self.sendTopic(self.topic, self.port)
         while True:
             imageFrame = self.generateImage()
             for subscriber in self.subscribers:
