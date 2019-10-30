@@ -12,8 +12,9 @@ IMAGE = '1'
 
 # PACKET STRUCTURE
 ACK = '1'
-REQUEST = '0'
-REPLY = '1'
+TOPIC_DISCOVERY = '0'
+TOPIC_REGISTRATION = '1'
+
 
 def generateHash(payload):
     return hashlib.md5(payload).digest()

@@ -1,14 +1,13 @@
 import constants as c
 import socket
 from select import select
-from cv2 import VideoCapture
+# from cv2 import VideoCapture
 from time import sleep
 from math import ceil
 
 class Publisher:
     def __init__(self, topic, port, timeout):
         self.controlSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.controlSocket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         self.controlSocket.bind(("", c.CONTROL_PLANE_PORT))
         self.controlSocket.settimeout(3)
         
@@ -16,26 +15,27 @@ class Publisher:
         self.port = port
         self.timeout = timeout
 
-        self.camera = VideoCapture(0)
+        # self.camera = VideoCapture(0)
 
         # keeps track of ip addresses
         self.subscribers = []
     
-    def generateImage(self):
-        sleep(self.timeout)
-        success, frame = self.camera.read()
-        if success is False:
-            print('Camera is unable to record input.')
-            exit(1)
-        # frame = frame.compress()
-        return frame;
+    # def generateImage(self):
+    #     sleep(self.timeout)
+    #     success, frame = self.camera.read()
+    #     if success is False:
+    #         print('Camera is unable to record input.')
+    #         exit(1)
+    #     # frame = frame.compress()
+    #     return frame;
 
-    def createPacket(self, type, payload):
-        payload = f""
+    def createPacket(self, type, message):
+        payload = f"{type}  "
         if type == c.TOPIC_INFO:
             payload += f"{[self.topic, self.port]}"
         else:
-            payload += f"{payload}"
+            payload += f"{message}"
+        print(payload)
         utfPayload = payload.encode()
         hash = c.generateHash(utfPayload)
         return hash + utfPayload
@@ -45,13 +45,32 @@ class Publisher:
         # self.generateImage()
         imagePacket = self.createPacket(c.IMAGE, "") #replace "" with spliced image payloads
 
-    def sendTopic(self, topic, port):
+    def sendTopic(self, addr, port):
         registerTopicPacket = self.createPacket(c.TOPIC_INFO, "")
-        self.controlSocket.sendto(registerTopicPacket, ('<broadcast>', c.CONTROL_PLANE_PORT))
+        self.controlSocket.sendto(registerTopicPacket, (addr, c.CONTROL_PLANE_PORT))
+    
+    def receive(self):
+        rawData, addr = self.controlSocket.recvfrom(2048)
+        hash, payload = rawData[0:c.HASHSIZE], rawData[c.HASHSIZE:]
+
+        if c.verifyPacket(hash, payload):
+            payload = payload.decode()
+            payload = payload.split("  ")
+        
+        if payload[0] == c.TOPIC_REGISTRATION:
+            self.subscribers.append(addr)
+        elif payload[0] == c.TOPIC_DISCOVERY:
+            self.sendTopic(addr, self.port)
+        else:
+            print('something wrong you should not be here')
+        
 
     def start(self):
-        for i in range(c.RETRY_POLICY):
-            self.sendTopic(self.topic, self.port)
+        while True:
+        # for i in range(c.RETRY_POLICY):
+            self.receive()
+            print(f'received registration {self.subscribers}')
+            sleep(0.5)
         while True:
             imageFrame = self.generateImage()
             for subscriber in self.subscribers:

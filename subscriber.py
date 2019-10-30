@@ -2,10 +2,33 @@ import socket
 import constants as c
 from select import select
 from time import sleep
-from random import randint
+from random import randint as ri
 from copy import deepcopy
 
-class Subscriber:
+class SubscriberSlave:
+    def __init__(self, addr, port):
+        self.dataSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.dataSocket.bind((addr, port))
+        self.initialSeqNum = 0
+        self.image = ""
+    
+    def receive(self, type):
+        rawData, addr = self.controlSocket.recvfrom(2048)
+        hash, payload = rawData[0:c.HASHSIZE], rawData[c.HASHSIZE:]
+
+        # if not corrupted packet
+        if c.verifyPacket(hash, payload):
+            payload = payload.decode()
+            payload = payload.split("  ")
+        
+        # ack logic goes here
+        # upon finish, call returnImage
+
+    def returnImage(self):
+        # pass this to the manager for him to pass to the frontEnd
+        pass
+
+class SubscriberManager:
     def __init__(self):
         # self.meaddress = socket.gethostbyname(socket.gethostname())
         self.controlSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -13,87 +36,109 @@ class Subscriber:
         self.controlSocket.settimeout(3)
         self.controlSocket.bind(("", c.CONTROL_PLANE_PORT))
         
+        # socket objects to listen to
         self.socketsToListenTo = [self.controlSocket]
 
-        # keeps track of topic/ports
-        self.topics = {}
-        
-        # keeps track of ports/seqNum
-        self.publishers = {}
+        # keeps track of topic: {addr, port}
+        self.registeredTopics = {}
+
+        # keeps track of what is available, mainly to show frontend topic: {address, port, registered?}
+        self.discoveredTopics = {}
 
     #  a subscriber should send ACKs and topic discoveries and topic registrations
     # packet structure: hash -- P/S -- type -- ackNum
     def createPacket(self, type, message):
-        payload = ""
-        if type != "TOPIC_DISCOVERY":
+        payload = f"{type}  "
+        if type != c.TOPIC_DISCOVERY:
             payload += f"{message}"
         utfPayload = payload.encode()
         hash = c.generateHash(utfPayload)
         return hash + utfPayload
 
     # sending tables - if no one replies, default {}. If a publisher replies, update my table
-    def topicDiscovery(self, socket):
-        topicDiscoveryPacket = self.createPacket('TOPIC_DISCOVERY', "")
-        return socket.sendto(topicDiscoveryPacket, ('<broadcast>', c.CONTROL_PLANE_PORT))
+    def sendTopicDiscovery(self):
+        topicDiscoveryPacket = self.createPacket(c.TOPIC_DISCOVERY, "")
+        return self.controlSocket.sendto(topicDiscoveryPacket, ('<broadcast>', c.CONTROL_PLANE_PORT))
 
-    def topicRegistration(self, socket, topic):
-        topicRegistrationPacket = self.createPacket("TOPIC_REGISTRATION", topic)
-        return socket.sendto(topicRegistrationPacket, ('<broadcast>', c.CONTROL_PLANE_PORT))
+    def sendTopicRegistration(self, topic):
+        topicRegistrationPacket = self.createPacket(c.TOPIC_REGISTRATION, topic)
+        return self.controlSocket.sendto(topicRegistrationPacket, (self.discoveredTopics[topic]["address"], c.CONTROL_PLANE_PORT))
 
-    def sendAck(self, socket, addr):
-        ackPacket = self.createPacket("SEND_ACK", addr) #TODO: ADDR IS A PLACEHOLDER
-        return socket.sendto(ackPacket, (addr, c.CONTROL_PLANE_PORT))
+    # def sendAck(self, addr, ackNum):
+    #     ackPacket = self.createPacket("SEND_ACK", ackNum) #TODO: ADDR IS A PLACEHOLDER
+    #     return self.controlSocket.sendto(ackPacket, (addr, c.CONTROL_PLANE_PORT))
 
     # by separating the receive calls, we dont have to encode so much information in our packets
     # packet structure: hash -- payload
-    def control_receive(self, socket):
-        rawData, addr = socket.recvfrom(1024)
+    def receive(self):
+        rawData, addr = self.controlSocket.recvfrom(2048)
         hash, payload = rawData[0:c.HASHSIZE], rawData[c.HASHSIZE:]
 
         # if not corrupted packet
         if c.verifyPacket(hash, payload):
             payload = payload.decode()
             payload = payload.split("  ")
-            print(payload)
-
-            if payload[0] != "":
-                [topic, port] = payload
-                if topic not in self.topics:
-                    dataSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                    dataSocket.bind((addr, port))
-                    self.socketsToListenTo.append(dataSocket)
-                    self.topics[topic] = port
-                    return True
-        return False
-
-    def data_receive(self, socket, image):
-        rawData, addr = socket.recvfrom(1024)
-        hash, payload = rawData[0:c.HASHSIZE], rawData[c.HASHSIZE:]
-
-        # if not corrupted packet
-        if c.verifyPacket(hash, payload):
-            payload = payload.decode()
-            payload = payload.split("  ")
-            print(payload)
         
-            if payload:
-                # have to insert ack logic
-                newImage = image + payload
-                return newImage
-        return False
+        if payload[0] == c.TOPIC_REGISTRATION:
+            self.registerTopic(addr, payload[1])
+        elif payload[0] == c.TOPIC_DISCOVERY:
+            self.discoverTopics(addr, payload[1])
+        else:
+            print('something wrong you should not be here')
+
+
+    def registerTopic(self, addr, payload):
+        if payload[0] != "":
+            # need try catch
+            [topic, port] = payload
+            topicSocket = SubscriberSlave(addr, port)
+            self.socketsToListenTo.append(topicSocket)
+            self.registeredTopics[topic] = {"address": addr, "port": port}
+            self.discoveredTopics[topic]["registered"] = True
+            #tell front end success
+            print(f"register success {self.registeredTopics}")
+        else:
+            #tell front end fail
+            print("register fail")
+
+    def discoverTopics(self, addr, payload):
+        if payload[0] != "":
+            [topic, port] = payload
+            if topic not in self.discoveredTopics:
+                self.discoveredTopics[topic] = {"address": addr, "port": port, "registered": False}
+                #tell front end success
+                print(f"discover success {self.discoveredTopics}")
+            else:
+                #tell front end fail
+                print("discover fail")
 
     def start(self):
-        while True:
-            for i in range(c.RETRY_POLICY): # use timr to space discovery by 30s or smth
-                self.topicDiscovery(self.controlSocket)
-                self.control_receive(self.controlSocket)
-            print(f'this is my fking table {self.topics}')
-            ready, _, _ = select(self.socketsToListenTo, [], [])
-            for r in ready:
-                # destAddress = self.r.getsockname()[0]
-                self.data_receive(r)
+        notListening = True
+        while notListening:
+        # for i in range(c.RETRY_POLICY): # use timer to space discovery by 30s or smth
+            self.sendTopicDiscovery()
+            print('sent discovery')
+            self.receive()
+            notListening = False
+            print(f'this is my discover table {self.discoveredTopics}')
+            print(f'this is my registered table {self.registeredTopics}')
+            print("="*50)
+        # testing
+        for key in self.discoveredTopics.keys():
+            self.sendTopicRegistration(self.discoveredTopics[key])
+            print(f'this is my discover table {self.discoveredTopics}')
+            print(f'this is my registered table {self.registeredTopics}')
+            print("="*50)
+        
+
+        # ready, _, _ = select(self.socketsToListenTo, [], [])
+        # for r in ready:
+        #     # destAddress = self.r.getsockname()[0]
+        #     self.data_receive(r)
                 
 
 if __name__ == "__main__":
-    subscriber = Subscriber()
+    subscriber = SubscriberManager()
     subscriber.start()
+    subscriber.sendTopicDiscovery()
+    subscriber.receive()
