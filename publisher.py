@@ -8,8 +8,8 @@ from math import ceil
 class Publisher:
     def __init__(self, topic, port, timeout):
         self.controlSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.controlSocket.bind(("", c.CONTROL_PLANE_PORT))
-        self.controlSocket.settimeout(3)
+        self.controlSocket.bind(("localhost", c.CONTROL_PLANE_PORT))
+        self.controlSocket.settimeout(60)
         
         self.topic = topic
         self.port = port
@@ -50,6 +50,7 @@ class Publisher:
         self.controlSocket.sendto(registerTopicPacket, (addr, c.CONTROL_PLANE_PORT))
     
     def receive(self):
+        print('Receiving...')
         rawData, addr = self.controlSocket.recvfrom(2048)
         hash, payload = rawData[0:c.HASHSIZE], rawData[c.HASHSIZE:]
 
@@ -58,9 +59,10 @@ class Publisher:
             payload = payload.split("  ")
         
         if payload[0] == c.TOPIC_REGISTRATION:
-            self.subscribers.append(addr)
+            self.subscribers.append(addr[0])
+            print(f'received registration {self.subscribers}')
         elif payload[0] == c.TOPIC_DISCOVERY:
-            self.sendTopic(addr, self.port)
+            self.sendTopic(addr[0], self.port)
         else:
             print('something wrong you should not be here')
         
@@ -69,7 +71,6 @@ class Publisher:
         while True:
         # for i in range(c.RETRY_POLICY):
             self.receive()
-            print(f'received registration {self.subscribers}')
             sleep(0.5)
         while True:
             imageFrame = self.generateImage()
@@ -84,6 +85,6 @@ if __name__ == "__main__":
     # dummy - frontend will call this program with the parameters
     topic = 'door'
     port = 7435
-    timeout = 3
+    timeout = 60
     publisher = Publisher(topic, port, timeout)
     publisher.start()
