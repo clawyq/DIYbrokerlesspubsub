@@ -34,8 +34,9 @@ class SubscriberManager:
         # self.meaddress = socket.gethostbyname(socket.gethostname())
         self.controlSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.controlSocket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        self.controlSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.controlSocket.settimeout(60)
-        self.controlSocket.bind(("127.0.0.2", c.CONTROL_PLANE_PORT))
+        self.controlSocket.bind(("192.168.1.182", c.CONTROL_PLANE_PORT))
         
         # socket objects to listen to
         self.socketsToListenTo = [self.controlSocket]
@@ -49,17 +50,17 @@ class SubscriberManager:
     #  a subscriber should send ACKs and topic discoveries and topic registrations
     # packet structure: hash -- P/S -- type -- ackNum
     def createPacket(self, type, message):
-        payload = f"{type}  "
+        payload = type + "  "
         if type != c.TOPIC_DISCOVERY:
-            payload += f"{message}"
+            payload += message
         utfPayload = payload.encode()
         hash = c.generateHash(utfPayload)
         return hash + utfPayload
 
-    # sending tables - if no one replies, default {}. If a publisher replies, update my table
+    # sending tables - if no one replies, default {}. iF a publisher replies, update my table
     def sendTopicDiscovery(self):
         topicDiscoveryPacket = self.createPacket(c.TOPIC_DISCOVERY, "")
-        return self.controlSocket.sendto(topicDiscoveryPacket, ('localhost', c.CONTROL_PLANE_PORT))
+        return self.controlSocket.sendto(topicDiscoveryPacket, ('<broadcast>', c.CONTROL_PLANE_PORT))
 
     def sendTopicRegistration(self, topic):
         topicRegistrationPacket = self.createPacket(c.TOPIC_REGISTRATION, topic)
@@ -92,12 +93,12 @@ class SubscriberManager:
             # need try catch
             port = self.discoveredTopics[topic]["port"]
             addr = self.discoveredTopics[topic]["address"]
-            topicSocket = SubscriberSlave(addr, port)
-            self.socketsToListenTo.append(topicSocket)
+            # topicSocket = SubscriberSlave(addr, port)
+            # self.socketsToListenTo.append(topicSocket)
             self.registeredTopics[topic] = {"address": addr, "port": port}
             self.discoveredTopics[topic]["registered"] = True
             #tell front end success
-            print(f"register success {self.registeredTopics}")
+            print("register success", self.registeredTopics)
 
     def discoverTopics(self, addr, payload):
         if payload[0] != "":
@@ -105,7 +106,7 @@ class SubscriberManager:
             if topic not in self.discoveredTopics:
                 self.discoveredTopics[topic] = {"address": addr[0], "port": port, "registered": False}
                 #tell front end success
-                print(f"discover success {self.discoveredTopics}")
+                print("discover success ", self.discoveredTopics)
             else:
                 #tell front end fail
                 print("discover fail")
@@ -118,15 +119,15 @@ class SubscriberManager:
             print('sent discovery')
             self.receive()
             notListening = False
-            print(f'this is my discover table {self.discoveredTopics}')
-            print(f'this is my registered table {self.registeredTopics}')
+            print('this is my discover table', self.discoveredTopics)
+            print('this is my registered table', self.registeredTopics)
             print("="*50)
         # testing
         for topic in self.discoveredTopics:
             self.registerTopic(topic)
             self.sendTopicRegistration(topic)
-            print(f'this is my discover table {self.discoveredTopics}')
-            print(f'this is my registered table {self.registeredTopics}')
+            print('this is my discover table', self.discoveredTopics)
+            print('this is my registered table', self.registeredTopics)
             print("="*50)
         
 

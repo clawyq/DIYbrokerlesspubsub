@@ -8,7 +8,7 @@ from math import ceil
 class Publisher:
     def __init__(self, topic, port, timeout):
         self.controlSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.controlSocket.bind(("localhost", c.CONTROL_PLANE_PORT))
+        self.controlSocket.bind(("", c.CONTROL_PLANE_PORT))
         self.controlSocket.settimeout(60)
         
         self.topic = topic
@@ -30,11 +30,11 @@ class Publisher:
     #     return frame;
 
     def createPacket(self, type, message):
-        payload = f"{type}  "
+        payload = type + "  "
         if type == c.TOPIC_INFO:
-            payload += f"{[self.topic, self.port]}"
+            payload += str([self.topic, self.port])
         else:
-            payload += f"{message}"
+            payload += message
         print(payload)
         utfPayload = payload.encode()
         hash = c.generateHash(utfPayload)
@@ -47,6 +47,7 @@ class Publisher:
 
     def sendTopic(self, addr, port):
         registerTopicPacket = self.createPacket(c.TOPIC_INFO, "")
+        print(addr)
         self.controlSocket.sendto(registerTopicPacket, (addr, c.CONTROL_PLANE_PORT))
     
     def receive(self):
@@ -60,9 +61,11 @@ class Publisher:
         
         if payload[0] == c.TOPIC_REGISTRATION:
             self.subscribers.append(addr[0])
-            print(f'received registration {self.subscribers}')
+            print('received registration', self.subscribers)
         elif payload[0] == c.TOPIC_DISCOVERY:
-            self.sendTopic(addr[0], self.port)
+            # Check if we have already subscribed to it
+            if addr[0] not in self.subscribers:
+                self.sendTopic(addr[0], self.port)
         else:
             print('something wrong you should not be here')
         
