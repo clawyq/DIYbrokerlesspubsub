@@ -33,11 +33,12 @@ class SubscriberSlave:
 class SubscriberManager:
     def __init__(self):
         # self.meaddress = socket.gethostbyname(socket.gethostname())
+        self.local_ip = self._getLocalIP()
         self.controlSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.controlSocket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         self.controlSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.controlSocket.settimeout(60)
-        self.controlSocket.bind((self._getLocalIP(), c.CONTROL_PLANE_PORT))
+        self.controlSocket.bind((self.local_ip, c.CONTROL_PLANE_PORT))
         
         # socket objects to listen to
         self.socketsToListenTo = [self.controlSocket]
@@ -102,6 +103,9 @@ class SubscriberManager:
                     break
 
                 rawData, addr = self.controlSocket.recvfrom(2048)
+                if addr[0] == self.local_ip:
+                    continue
+                
                 hash, payload = rawData[0:c.HASHSIZE], rawData[c.HASHSIZE:]
 
                 # if not corrupted packet
@@ -109,6 +113,7 @@ class SubscriberManager:
                     payload = payload.decode()
                     payload = payload.split("  ")
                     # Convert from string to list representation
+                    print(payload)
                     payload[1] = ast.literal_eval(payload[1])
                 
                 if payload[0] == c.TOPIC_DISCOVERY:
