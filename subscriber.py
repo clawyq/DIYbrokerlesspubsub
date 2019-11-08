@@ -105,7 +105,7 @@ class SubscriberManager:
                 rawData, addr = self.controlSocket.recvfrom(2048)
                 if addr[0] == self.local_ip:
                     continue
-                
+
                 hash, payload = rawData[0:c.HASHSIZE], rawData[c.HASHSIZE:]
 
                 # if not corrupted packet
@@ -150,6 +150,12 @@ class SubscriberManager:
             else:
                 #tell front end fail
                 print("discover fail")
+
+    def getDiscoveredTopics(self):
+        """
+            Returns the discovered topics in a form of a list
+        """
+        return list(self.discoveredTopics.keys())
 
     def start(self):
         notListening = True

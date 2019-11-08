@@ -4,6 +4,7 @@ import tkinter as tk
 from PIL import Image, ImageTk
 from random import randint
 
+from subscriber import SubscriberManager, SubscriberSlave
 
 
 class Example(Frame):
@@ -18,8 +19,12 @@ class Example(Frame):
         self.variable.trace("w", self.selectTopic)
         self.discoverMenu = OptionMenu(self, self.variable)
         self.topicMenu = OptionMenu(self, self.variable)
-        
         self.initUI()
+
+        self.subscriber = SubscriberManager()
+        # self.subscriber.start()
+        # self.subscriber.sendTopicDiscovery()
+        # self.subscriber.receive()
 
     def selectTopic(*args):
         print(self.variable.get())
@@ -35,8 +40,14 @@ class Example(Frame):
         self.canvas.image = img
     
     def discover(self):
+        print("Starting discovery...")
+        # self.subscriber.sendTopicDiscovery()
+        # self.subscriber.receive()
+        self.subscriber.start()
+        topicLst = self.subscriber.getDiscoveredTopics()
+        print(topicLst)
         numTopics = randint(5, 10)
-        topicLst = ["t" + str(n) for n in range(numTopics)]
+        # topicLst = ["t" + str(n) for n in range(numTopics)]
         variable = StringVar(self)
         variable.set("one") # default value
         self.discoverMenu = OptionMenu(self, variable, *topicLst)
@@ -62,7 +73,7 @@ class Example(Frame):
         self.rowconfigure(3, pad=3)
         self.rowconfigure(4, pad=3)
 
-        cls = Button(self, text="Cls", command=self.showImage)
+        cls = Button(self, text="Cls", command=self.showImage)  
         cls.grid(row=1, column=0)
         bck = Button(self, text="Discover", command=self.discover)
         bck.grid(row=1, column=1)
