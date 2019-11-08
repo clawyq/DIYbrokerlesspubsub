@@ -40,7 +40,7 @@ class Publisher:
     def createPacket(self, type, message):
         payload = type + "  "
         if type == c.TOPIC_INFO:
-            payload += "[" + self.topic + self.por+ "]"
+            payload += "[" + self.topic + self.port + "]"
             utfPayload = payload.encode()
         else:
             utfPayload = message    # image data is already in bytes format
