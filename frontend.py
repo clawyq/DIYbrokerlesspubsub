@@ -4,10 +4,13 @@ import tkinter as tk
 from PIL import Image, ImageTk
 from random import randint
 import time
+import os
+import collections
 
 from subscriber import SubscriberManager, SubscriberSlave
 
 def genFakeTopics():
+    
     numTopics = randint(5, 10)
     topics = ["t" + str(n) for n in range(numTopics)]
     return topics
@@ -23,13 +26,18 @@ class mainFrame(Frame):
     def __init__(self):
         super().__init__()
         self.canvas = tk.Canvas(self, height=200, width=200)
-        img = None
-        self.image_id = self.canvas.create_image(200, 200, image=img)
+        self.img = None
+        self.image_id = self.canvas.create_image(200, 200, image=self.img)
+        self.image_path = "Test"
+        
         self.variable = StringVar(self)
-        self.variable.set("Empty.")
-        self.variable.trace("w", self.selectTopic)
+        self.variable.set("t1")
+        # self.variable.trace("w", self.selectTopic)
         self.discoverMenu = OptionMenu(self, self.variable)
         self.topicMenu = OptionMenu(self, self.variable)
+
+        self.v = set()
+        self.topicQueues = collections.defaultdict(collections.deque)
         self.initUI()
 
         self.subscriber = SubscriberManager()
@@ -37,13 +45,9 @@ class mainFrame(Frame):
         # self.subscriber.sendTopicDiscovery()
         # self.subscriber.receive()
 
-    def selectTopic(*args):
-        print(self.variable.get())
 
-
-    def showImage(self):
+    def showImage(self, path):
         print("Showing Image")
-        path = "images/download1.jpg"
         pil_img = Image.open(path).resize((400, 400), Image.ANTIALIAS)
         img = ImageTk.PhotoImage(pil_img)
         # self.canvas.itemconfigure(self.image_id, image=img)
@@ -93,6 +97,45 @@ class mainFrame(Frame):
         for b in self.buttons:
             b.destroy()
 
+    def getTopic(self, path):
+        topic = path.split('-')[0]
+        return topic
+
+    def addNewImagesToQueues(self):
+        for path in list(os.walk('images'))[0][2]:
+            if path not in self.v:
+                topic = self.getTopic(path)
+                print(f'adding {path} to queue {topic}')
+                self.topicQueues[topic].append(path)
+                self.v.add(path)
+
+    def setVar(self):
+        self.variable.set("t2")
+
+    def refresh_image(self, canvas, img, image_path, image_id):
+    
+        # if no images in queue, show blank
+        # otherwise, cycle though images in 30 second cycle, 5 seconds each
+        try:
+            print("Refreshing...")
+            self.addNewImagesToQueues()
+            channel = self.variable.get()
+            q = self.topicQueues.get(channel)
+            print(channel)
+            if len(q) == 0:
+                # show BLANK
+                pass
+            else:
+                img_path = "images/"+ q.pop()
+                print(f"Showing image {img_path}")
+                # pil_img = Image.open(img_path).resize((200, 200), Image.ANTIALIAS)
+                # img = ImageTk.PhotoImage(pil_img)
+                # self.canvas.itemconfigure(self.image_id, image=img)
+                self.showImage(img_path)
+        except IOError:  # missing or corrupt image file
+            img = None
+        # repeat every half sec
+        canvas.after(1000, self.refresh_image, self.canvas, self.img, self.image_path, self.image_id)  
 
     def initUI(self):
 
@@ -112,7 +155,7 @@ class mainFrame(Frame):
         self.rowconfigure(3, pad=3)
         self.rowconfigure(4, pad=3)
 
-        cls = Button(self, text="Cls", command=self.showImage)  
+        cls = Button(self, text="Cls")  
         cls.grid(row=1, column=0)
         bck = Button(self, text="Discover", command=self.discover)
         bck.grid(row=1, column=1)
@@ -120,7 +163,7 @@ class mainFrame(Frame):
         lbl.grid(row=1, column=2)
         clo = Button(self, text="Destory", command=self.destroyButtons)
         clo.grid(row=1, column=3)
-        sev = Button(self, text="7")
+        sev = Button(self, text="t2", command=self.setVar)
         sev.grid(row=2, column=0)
         eig = Button(self, text="8")
         eig.grid(row=2, column=1)
@@ -140,6 +183,7 @@ def main():
 
     root = Tk()
     app = mainFrame()
+    app.refresh_image(app.canvas, app.img, app.image_path, app.image_id)
     root.mainloop()
 
 
