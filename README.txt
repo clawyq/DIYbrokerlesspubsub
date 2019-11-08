@@ -32,3 +32,10 @@ Questions to ponder (301019 1800):
   - select library? run in a loop?
   - multithreaded program and use another class which runs in parallel solely dedicated to a specific plane
   --- 1 manager in charge of control plane, n slaves in charge of data plane
+
+Topic Discovery(Assumption that publisher is there):
+1. Subscriber comes in and broadcast topic discovery packet for 5 seconds.
+2. Subscriber waits and listens for incoming reply. If there is no reply, then there
+is a timeout else we will add to topic to a dictionary of discovered topics
+3. After 5 seconds, the subscriber sends a registration packet to all the publisher and gets an ack back.
+4. The subscriber then spawns a slave for each publisher
