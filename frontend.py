@@ -3,11 +3,22 @@ from tkinter.ttk import Frame, Button, Entry, Style, OptionMenu
 import tkinter as tk
 from PIL import Image, ImageTk
 from random import randint
+import time
 
 from subscriber import SubscriberManager, SubscriberSlave
 
+def genFakeTopics():
+    numTopics = randint(5, 10)
+    topics = ["t" + str(n) for n in range(numTopics)]
+    return topics
 
-class Example(Frame):
+def nextGridNums(r, c):
+    if c == 2:
+        return r + 1, 0
+    else:
+        return r, c + 1
+
+class mainFrame(Frame):
 
     def __init__(self):
         super().__init__()
@@ -41,23 +52,51 @@ class Example(Frame):
     
     def discover(self):
         print("Starting discovery...")
-        # self.subscriber.sendTopicDiscovery()
-        # self.subscriber.receive()
-        self.subscriber.start()
-        topicLst = self.subscriber.getDiscoveredTopics()
-        print(topicLst)
-        numTopics = randint(5, 10)
-        # topicLst = ["t" + str(n) for n in range(numTopics)]
+        """
+            Sends discovery request to all subscribers. 
+            
+            From topics:
+                check for a new image every 30 seconds
+                if there is an image, add it to list. 
+
+            Generates Button for every topic, when button is pressed, displays 'channel'.
+            
+            Returns list of topics.
+
+        """
+        
+        topics = genFakeTopics()
         variable = StringVar(self)
-        variable.set("one") # default value
-        self.discoverMenu = OptionMenu(self, variable, *topicLst)
+        variable.set(topics[0]) # TODO: cope for null inputs
+        self.discoverMenu = OptionMenu(self, variable, *topics)
         self.discoverMenu.grid(row=1, column=4)
-        self.pack() 
-        return topicLst
+        self.pack()
+
+        self.buttons = self.generateButtons(topics)
+
+    def generateButtons(self, topics):
+        r = 3
+        c = 0
+        buttons = []
+        for topic in topics:
+            b = Button(self, text=topic)
+            b.grid(row=r, column=c)
+            r, c = nextGridNums(r, c)
+            print(f"r: {r} c: {c}")
+            buttons.append(b)
+
+        self.pack()
+
+        return buttons
+
+    def destroyButtons(self):
+        for b in self.buttons:
+            b.destroy()
+
 
     def initUI(self):
 
-        self.master.title("Calculator")
+        self.master.title("Frontend")
 
         Style().configure("TButton", padding=(0, 5, 0, 5),
             font='serif 10')
@@ -79,7 +118,7 @@ class Example(Frame):
         bck.grid(row=1, column=1)
         lbl = Button(self)
         lbl.grid(row=1, column=2)
-        clo = Button(self, text="Close")
+        clo = Button(self, text="Destory", command=self.destroyButtons)
         clo.grid(row=1, column=3)
         sev = Button(self, text="7")
         sev.grid(row=2, column=0)
@@ -89,33 +128,6 @@ class Example(Frame):
         nin.grid(row=2, column=2)
         div = Button(self, text="/")
         div.grid(row=2, column=3)
-
-        fou = Button(self, text="4")
-        fou.grid(row=3, column=0)
-        fiv = Button(self, text="5")
-        fiv.grid(row=3, column=1)
-        six = Button(self, text="6")
-        six.grid(row=3, column=2)
-        mul = Button(self, text="*")
-        mul.grid(row=3, column=3)
-
-        one = Button(self, text="1")
-        one.grid(row=4, column=0)
-        two = Button(self, text="2")
-        two.grid(row=4, column=1)
-        thr = Button(self, text="3")
-        thr.grid(row=4, column=2)
-        mns = Button(self, text="-")
-        mns.grid(row=4, column=3)
-
-        zer = Button(self, text="0")
-        zer.grid(row=5, column=0)
-        dot = Button(self, text=".")
-        dot.grid(row=5, column=1)
-        equ = Button(self, text="=")
-        equ.grid(row=5, column=2)
-        pls = Button(self, text="+")
-        pls.grid(row=5, column=3)
 
         self.canvas.grid(row=1, column=4)   
         self.discoverMenu.grid(row=1, column=4)
@@ -127,7 +139,7 @@ class Example(Frame):
 def main():
 
     root = Tk()
-    app = Example()
+    app = mainFrame()
     root.mainloop()
 
 
