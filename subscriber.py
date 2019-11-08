@@ -1,5 +1,10 @@
 import socket
 import constants as c
+import cv2
+import zlib
+import pickle
+import datetime
+
 from select import select
 from time import sleep
 from random import randint as ri
@@ -23,6 +28,31 @@ class SubscriberSlave:
         
         # ack logic goes here
         # upon finish, call returnImage
+
+    # handles the image payload
+    # packet structure is as follows:
+    #
+    # ----------------------------------------------
+    # sequence number (4 bytes) | more flag (1 byte)
+    # ----------------------------------------------
+    #         image byte data (max 571 bytes)
+    # ----------------------------------------------
+    #
+    # precondition: payload excludes hash value
+    def handlePayload(self, payload):
+        seqNumHeader = payload[16:20]
+        moreFlagHeader = payload[20:21]
+        imageData = payload[21:]
+
+        data = zlib.decompress(imageData)
+        recvData = pickle.loads(data, fix_imports=True, encoding="bytes")
+        recvImage = cv2.imdecode(recvData, cv2.IMREAD_COLOR)
+
+        print(int.from_bytes(seqNumHeader, byteorder="big"))
+        print(int.from_bytes(moreFlagHeader, byteorder="big"))
+
+        cv2.imwrite(datetime.datetime.now().strftime('%Y-%m-%d%H:%M:%S') +
+                    '.jpg', recvImage)
 
     def returnImage(self):
         # pass this to the manager for him to pass to the frontEnd
@@ -58,11 +88,13 @@ class SubscriberManager:
     # sending tables - if no one replies, default {}. If a publisher replies, update my table
     def sendTopicDiscovery(self):
         topicDiscoveryPacket = self.createPacket(c.TOPIC_DISCOVERY, "")
-        return self.controlSocket.sendto(topicDiscoveryPacket, ('<broadcast>', c.CONTROL_PLANE_PORT))
+        return self.controlSocket.sendto(topicDiscoveryPacket,
+                                         ('<broadcast>', c.CONTROL_PLANE_PORT))
 
     def sendTopicRegistration(self, topic):
         topicRegistrationPacket = self.createPacket(c.TOPIC_REGISTRATION, topic)
-        return self.controlSocket.sendto(topicRegistrationPacket, (self.discoveredTopics[topic]["address"], c.CONTROL_PLANE_PORT))
+        return self.controlSocket.sendto(topicRegistrationPacket,
+                                         (self.discoveredTopics[topic]["address"], c.CONTROL_PLANE_PORT))
 
     # def sendAck(self, addr, ackNum):
     #     ackPacket = self.createPacket("SEND_ACK", ackNum) #TODO: ADDR IS A PLACEHOLDER
