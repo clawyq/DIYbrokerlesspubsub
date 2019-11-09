@@ -16,8 +16,7 @@ class Publisher:
     def __init__(self, topic, port, timeout):
         self.controlSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.controlSocket.bind(("", c.CONTROL_PLANE_PORT))
-        self.controlSocket.settimeout(3)
-
+        self.controlSocket.settimeout(60)
         self.topic = topic
         self.port = port
         self.timeout = timeout
@@ -39,9 +38,9 @@ class Publisher:
     #     return frame;
 
     def createPacket(self, type, message):
-        payload = f"{type}  "
+        payload = type + "  "
         if type == c.TOPIC_INFO:
-            payload += f"{[self.topic, self.port]}"
+            payload += "[" + self.topic + self.port + "]"
             utfPayload = payload.encode()
         else:
             utfPayload = message    # image data is already in bytes format
@@ -63,7 +62,6 @@ class Publisher:
 
     def deliverPacket(self, socket, toSend, addr, expectedSeqNum):
         socket.sendto(toSend, addr)
-
         rawData, subscriberAddr = socket.recvfrom(2048)
         hash, payload = rawData[0:c.HASHSIZE], rawData[c.HASHSIZE:]
         if c.verifyPacket(hash, payload):
@@ -131,7 +129,7 @@ class Publisher:
                 else:
                     print('something wrong you should not be here')
 
-                print(f'received registration {self.subscribers}')
+                print('received registration' + self.subscribers)
             sleep(c.REFRESH_RATE)
 
     def listenForNewImage(self):
@@ -182,6 +180,6 @@ if __name__ == "__main__":
     # dummy - frontend will call this program with the parameters
     topic = 'door'
     port = 7435
-    timeout = 3
+    timeout = 60
     publisher = Publisher(topic, port, timeout)
     publisher.start()

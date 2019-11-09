@@ -1,4 +1,6 @@
 import socket
+import ast
+import time 
 import constants as c
 import cv2
 import zlib
@@ -61,10 +63,12 @@ class SubscriberSlave:
 class SubscriberManager:
     def __init__(self):
         # self.meaddress = socket.gethostbyname(socket.gethostname())
+        self.local_ip = self._getLocalIP()
         self.controlSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.controlSocket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        self.controlSocket.settimeout(3)
-        self.controlSocket.bind(("", c.CONTROL_PLANE_PORT))
+        self.controlSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.controlSocket.settimeout(60)
+        self.controlSocket.bind((self.local_ip, c.CONTROL_PLANE_PORT))
         
         # socket objects to listen to
         self.socketsToListenTo = [self.controlSocket]
@@ -75,17 +79,28 @@ class SubscriberManager:
         # keeps track of what is available, mainly to show frontend topic: {address, port, registered?}
         self.discoveredTopics = {}
 
+    def _getLocalIP(self):
+        """
+            Hacky way to get the local IP
+        """
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+
+        return ip
+
     #  a subscriber should send ACKs and topic discoveries and topic registrations
     # packet structure: hash -- P/S -- type -- ackNum
     def createPacket(self, type, message):
-        payload = f"{type}  "
+        payload = type + "  "
         if type != c.TOPIC_DISCOVERY:
-            payload += f"{message}"
+            payload += message
         utfPayload = payload.encode()
         hash = c.generateHash(utfPayload)
         return hash + utfPayload
 
-    # sending tables - if no one replies, default {}. If a publisher replies, update my table
+    # sending tables - if no one replies, default {}. iF a publisher replies, update my table
     def sendTopicDiscovery(self):
         topicDiscoveryPacket = self.createPacket(c.TOPIC_DISCOVERY, "")
         return self.controlSocket.sendto(topicDiscoveryPacket,
@@ -103,63 +118,100 @@ class SubscriberManager:
     # by separating the receive calls, we dont have to encode so much information in our packets
     # packet structure: hash -- payload
     def receive(self):
-        rawData, addr = self.controlSocket.recvfrom(2048)
-        hash, payload = rawData[0:c.HASHSIZE], rawData[c.HASHSIZE:]
+        """
+            Receives packets from the publisher and stores the information in the
+            subscriber. If it does not receive anything after 5 seconds then it will simply return
+            an empty list
+            ** Currently only does registration **
+        """
+        start = time.time()
+        self.controlSocket.settimeout(5)
+        try:
+            while True:
+                # If the total time exceeds 5 seconds we end
+                end = time.time()
+                if end - start > 5:
+                    self.controlSocket.settimeout(60)
+                    break
 
-        # if not corrupted packet
-        if c.verifyPacket(hash, payload):
-            payload = payload.decode()
-            payload = payload.split("  ")
-        
-        if payload[0] == c.TOPIC_REGISTRATION:
-            self.registerTopic(addr, payload[1])
-        elif payload[0] == c.TOPIC_DISCOVERY:
-            self.discoverTopics(addr, payload[1])
-        else:
-            print('something wrong you should not be here')
+                rawData, addr = self.controlSocket.recvfrom(2048)
+                if addr[0] == self.local_ip:
+                    continue
 
+                hash, payload = rawData[0:c.HASHSIZE], rawData[c.HASHSIZE:]
 
-    def registerTopic(self, addr, payload):
-        if payload[0] != "":
+                # if not corrupted packet
+                if c.verifyPacket(hash, payload):
+                    payload = payload.decode()
+                    payload = payload.split("  ")
+                    # Convert from string to list representation
+                    print(payload)
+                    payload[1] = ast.literal_eval(payload[1])
+                
+                if payload[0] == c.TOPIC_DISCOVERY:
+                    self.discoverTopics(addr, payload[1])
+                else:
+                    print('something wrong you should not be here')
+
+        except socket.timeout:
+            # Case where there is nothing I will just time out
+            self.controlSocket.settimeout(60)
+            return False
+
+        # Indicates the end of time allocated
+        return True
+
+    def registerTopic(self, topic):
             # need try catch
-            [topic, port] = payload
-            topicSocket = SubscriberSlave(addr, port)
-            self.socketsToListenTo.append(topicSocket)
+            port = self.discoveredTopics[topic]["port"]
+            addr = self.discoveredTopics[topic]["address"]
+            # topicSocket = SubscriberSlave(addr, port)
+            # self.socketsToListenTo.append(topicSocket)
             self.registeredTopics[topic] = {"address": addr, "port": port}
             self.discoveredTopics[topic]["registered"] = True
             #tell front end success
-            print(f"register success {self.registeredTopics}")
-        else:
-            #tell front end fail
-            print("register fail")
+            print("register success", self.registeredTopics)
 
     def discoverTopics(self, addr, payload):
         if payload[0] != "":
             [topic, port] = payload
             if topic not in self.discoveredTopics:
-                self.discoveredTopics[topic] = {"address": addr, "port": port, "registered": False}
+                self.discoveredTopics[topic] = {"address": addr[0], "port": port, "registered": False}
                 #tell front end success
-                print(f"discover success {self.discoveredTopics}")
+                print("discover success ", self.discoveredTopics)
             else:
                 #tell front end fail
                 print("discover fail")
 
+    def getDiscoveredTopics(self):
+        """
+            Returns the discovered topics in a form of a list
+        """
+        return list(self.discoveredTopics.keys())
+
     def start(self):
         notListening = True
+        
         while notListening:
         # for i in range(c.RETRY_POLICY): # use timer to space discovery by 30s or smth
             self.sendTopicDiscovery()
             print('sent discovery')
-            self.receive()
-            notListening = False
-            print(f'this is my discover table {self.discoveredTopics}')
-            print(f'this is my registered table {self.registeredTopics}')
-            print("="*50)
+            received = self.receive()
+            if received:
+                print('this is my discover table', self.discoveredTopics)
+                print('this is my registered table', self.registeredTopics)
+                print("="*50)
+            else:
+                # Call the front end to retrieve self.discoveredTopics
+                print("No topics were found, finish discovery")
+                break
         # testing
-        for key in self.discoveredTopics.keys():
-            self.sendTopicRegistration(self.discoveredTopics[key])
-            print(f'this is my discover table {self.discoveredTopics}')
-            print(f'this is my registered table {self.registeredTopics}')
+        print("Done")
+        for topic in self.discoveredTopics:
+            self.registerTopic(topic)
+            self.sendTopicRegistration(topic)
+            print('this is my discover table', self.discoveredTopics)
+            print('this is my registered table', self.registeredTopics)
             print("="*50)
         
 
