@@ -10,9 +10,8 @@ import collections
 from subscriber import SubscriberManager, SubscriberSlave
 
 def genFakeTopics():
-    
-    numTopics = randint(5, 10)
-    topics = ["t" + str(n) for n in range(numTopics)]
+    numTopics = randint(5, 5)
+    topics = ["t" + str(n) for n in range(1, numTopics+1)]
     return topics
 
 def nextGridNums(r, c):
@@ -33,8 +32,8 @@ class mainFrame(Frame):
         self.variable = StringVar(self)
         self.variable.set("t1")
         # self.variable.trace("w", self.selectTopic)
-        self.discoverMenu = OptionMenu(self, self.variable)
-        self.topicMenu = OptionMenu(self, self.variable)
+        # self.discoverMenu = OptionMenu(self, self.variable)
+        # self.topicMenu = OptionMenu(self, self.variable)
 
         self.v = set()
         self.topicQueues = collections.defaultdict(collections.deque)
@@ -70,20 +69,20 @@ class mainFrame(Frame):
         """
         
         topics = genFakeTopics()
-        variable = StringVar(self)
-        variable.set(topics[0]) # TODO: cope for null inputs
-        self.discoverMenu = OptionMenu(self, variable, *topics)
-        self.discoverMenu.grid(row=1, column=4)
         self.pack()
-
         self.buttons = self.generateButtons(topics)
+
+    def setSpecVar(self, topic):
+        return lambda: self.variable.set(topic)
 
     def generateButtons(self, topics):
         r = 3
         c = 0
         buttons = []
-        for topic in topics:
-            b = Button(self, text=topic)
+        for t in topics:
+            print(f'setting button topic to {t}')
+            funct = self.setSpecVar(t)
+            b = Button(self, text=t, command=funct)
             b.grid(row=r, column=c)
             r, c = nextGridNums(r, c)
             print(f"r: {r} c: {c}")
@@ -109,9 +108,6 @@ class mainFrame(Frame):
                 self.topicQueues[topic].append(path)
                 self.v.add(path)
 
-    def setVar(self):
-        self.variable.set("t2")
-
     def refresh_image(self, canvas, img, image_path, image_id):
     
         # if no images in queue, show blank
@@ -119,9 +115,9 @@ class mainFrame(Frame):
         try:
             print("Refreshing...")
             self.addNewImagesToQueues()
-            channel = self.variable.get()
-            q = self.topicQueues.get(channel)
-            print(channel)
+            topic = self.variable.get()
+            q = self.topicQueues[topic]
+            print(topic)
             if len(q) == 0:
                 # show BLANK
                 pass
@@ -159,22 +155,11 @@ class mainFrame(Frame):
         cls.grid(row=1, column=0)
         bck = Button(self, text="Discover", command=self.discover)
         bck.grid(row=1, column=1)
-        lbl = Button(self)
-        lbl.grid(row=1, column=2)
         clo = Button(self, text="Destory", command=self.destroyButtons)
         clo.grid(row=1, column=3)
-        sev = Button(self, text="t2", command=self.setVar)
-        sev.grid(row=2, column=0)
-        eig = Button(self, text="8")
-        eig.grid(row=2, column=1)
-        nin = Button(self, text="9")
-        nin.grid(row=2, column=2)
-        div = Button(self, text="/")
-        div.grid(row=2, column=3)
-
         self.canvas.grid(row=1, column=4)   
-        self.discoverMenu.grid(row=1, column=4)
-        self.topicMenu.grid(row=1, column=5)
+        # self.discoverMenu.grid(row=1, column=4)
+        # self.topicMenu.grid(row=1, column=5)
 
         self.pack()
 
