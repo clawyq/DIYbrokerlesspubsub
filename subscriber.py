@@ -3,7 +3,6 @@ import constants as c
 from select import select
 from time import sleep
 from random import randint
-from copy import deepcopy
 
 class Subscriber:
     def __init__(self):
@@ -83,16 +82,16 @@ class Subscriber:
         return False
 
     def start(self):
-        while True:
-            for i in range(c.RETRY_POLICY): # use timr to space discovery by 30s or smth
-                self.topicDiscovery(self.controlSocket)
-                self.control_receive(self.controlSocket)
-            print(f'this is my fking table {self.topics}')
-            ready, _, _ = select(self.socketsToListenTo, [], [])
-            for r in ready:
-                # destAddress = self.r.getsockname()[0]
-                self.data_receive(r)
-                
+        app = Flask
+        for i in range(c.RETRY_POLICY): # use timr to space discovery by 30s or smth
+            self.topicDiscovery(self.controlSocket)
+            self.control_receive(self.controlSocket)
+        print(f'this is my fking table {self.topics}')
+        ready, _, _ = select(self.socketsToListenTo, [], [])
+        for r in ready:
+            # destAddress = self.r.getsockname()[0]
+            self.data_receive(r)
+            
 
 if __name__ == "__main__":
     subscriber = Subscriber()
