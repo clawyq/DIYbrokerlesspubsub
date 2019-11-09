@@ -47,13 +47,14 @@ class SubscriberSlave:
         imageData = payload[21:]
 
         data = zlib.decompress(imageData)
-        recvData = pickle.loads(data, fix_imports=True, encoding="bytes")
+        return data
+
+    # TODO: create a local variable 'topic' and store whatever topic the subscriber is listening to at the moment
+    def storeImage(self, imageBytes):
+        recvData = pickle.loads(imageBytes, fix_imports=True, encoding="bytes")
         recvImage = cv2.imdecode(recvData, cv2.IMREAD_COLOR)
 
-        print(int.from_bytes(seqNumHeader, byteorder="big"))
-        print(int.from_bytes(moreFlagHeader, byteorder="big"))
-
-        cv2.imwrite(datetime.datetime.now().strftime('%Y-%m-%d%H:%M:%S') +
+        cv2.imwrite(self.topic + '-' + datetime.datetime.now().strftime('%Y-%m-%d%H:%M:%S') +
                     '.jpg', recvImage)
 
     def returnImage(self):
