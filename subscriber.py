@@ -34,10 +34,7 @@ class SubscriberSlave:
                 payload = payload.split("  ")
                 hasMore = self.handlePayload(payload)
 
-        recvImage = cv2.imdecode(recvData, cv2.IMREAD_COLOR)
-
-        cv2.imwrite(datetime.datetime.now().strftime('%Y-%m-%d%H:%M:%S') +
-                   '.jpg', recvImage)
+        self.storeImage(buffer)
         
         # ack logic goes here
         # upon finish, call returnImage
@@ -61,18 +58,19 @@ class SubscriberSlave:
         recvData = pickle.loads(data, fix_imports=True, encoding="bytes")
         # recvImage = cv2.imdecode(recvData, cv2.IMREAD_COLOR)
 
-        print(int.from_bytes(seqNumHeader, byteorder="big"))
-        print(int.from_bytes(moreFlagHeader, byteorder="big"))
-
         if seqNumHeader == self.initialSeqNum:
             self.buffer += recvData
             self.initialSeqNum += len(recvData)
 
-        return (moreFlagHeader == 0)
+        # Will return true if there is more data to be received
+        return (moreFlagHeader == 1)  || (seqNumHeader != self.initialSeqNum)
 
+    # TODO: create a local variable 'topic' and store whatever topic the subscriber is listening to at the moment
+    def storeImage(self, imageBytes):
+        recvData = pickle.loads(imageBytes, fix_imports=True, encoding="bytes")
+        recvImage = cv2.imdecode(recvData, cv2.IMREAD_COLOR)
 
-        # cv2.imwrite(datetime.datetime.now().strftime('%Y-%m-%d%H:%M:%S') +
-        #            '.jpg', recvImage)
+        cv2.imwrite(datetime.datetime.now().strftime('%Y-%m-%d%H:%M:%S') + '.jpg', recvImage)
 
     def returnImage(self):
         # pass this to the manager for him to pass to the frontEnd
