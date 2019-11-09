@@ -40,7 +40,7 @@ class Publisher:
     def createPacket(self, type, message):
         payload = type + "  "
         if type == c.TOPIC_INFO:
-            payload += "[" + self.topic + self.port + "]"
+            payload += str([self.topic, self.port])
             utfPayload = payload.encode()
         else:
             utfPayload = message    # image data is already in bytes format
@@ -129,7 +129,7 @@ class Publisher:
                 else:
                     print('something wrong you should not be here')
 
-                print('received registration' + self.subscribers)
+                print('received registration' + str(self.subscribers))
             sleep(c.REFRESH_RATE)
 
     def listenForNewImage(self):

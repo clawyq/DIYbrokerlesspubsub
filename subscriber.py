@@ -6,6 +6,7 @@ import cv2
 import zlib
 import pickle
 import datetime
+import threading
 
 from select import select
 from time import sleep
@@ -17,16 +18,23 @@ class SubscriberSlave:
         self.dataSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.dataSocket.bind((addr, port))
         self.initialSeqNum = 0
+        self.buffer = ""
         self.image = ""
     
     def receive(self, type):
-        rawData, addr = self.controlSocket.recvfrom(2048)
-        hash, payload = rawData[0:c.HASHSIZE], rawData[c.HASHSIZE:]
+        hasMore = True
 
-        # if not corrupted packet
-        if c.verifyPacket(hash, payload):
-            payload = payload.decode()
-            payload = payload.split("  ")
+        while hasMore:
+            rawData, addr = self.controlSocket.recvfrom(2048)
+            hash, payload = rawData[0:c.HASHSIZE], rawData[c.HASHSIZE:]
+
+            # if not corrupted packet
+            if c.verifyPacket(hash, payload):
+                payload = payload.decode()
+                payload = payload.split("  ")
+                hasMore = self.handlePayload(payload)
+
+        self.storeImage(buffer)
         
         # ack logic goes here
         # upon finish, call returnImage
@@ -47,15 +55,22 @@ class SubscriberSlave:
         imageData = payload[21:]
 
         data = zlib.decompress(imageData)
-        return data
+        recvData = pickle.loads(data, fix_imports=True, encoding="bytes")
+        # recvImage = cv2.imdecode(recvData, cv2.IMREAD_COLOR)
+
+        if seqNumHeader == self.initialSeqNum:
+            self.buffer += recvData
+            self.initialSeqNum += len(recvData)
+
+        # Will return true if there is more data to be received
+        return (moreFlagHeader == 1)  || (seqNumHeader != self.initialSeqNum)
 
     # TODO: create a local variable 'topic' and store whatever topic the subscriber is listening to at the moment
     def storeImage(self, imageBytes):
         recvData = pickle.loads(imageBytes, fix_imports=True, encoding="bytes")
         recvImage = cv2.imdecode(recvData, cv2.IMREAD_COLOR)
 
-        cv2.imwrite(self.topic + '-' + datetime.datetime.now().strftime('%Y-%m-%d%H:%M:%S') +
-                    '.jpg', recvImage)
+        cv2.imwrite(datetime.datetime.now().strftime('%Y-%m-%d%H:%M:%S') + '.jpg', recvImage)
 
     def returnImage(self):
         # pass this to the manager for him to pass to the frontEnd
@@ -112,13 +127,24 @@ class SubscriberManager:
         return self.controlSocket.sendto(topicRegistrationPacket,
                                          (self.discoveredTopics[topic]["address"], c.CONTROL_PLANE_PORT))
 
+    def addDiscoveredTopic(self, addr, payload):
+        if payload[0] != "":
+            [topic, port] = payload
+            if topic not in self.discoveredTopics:
+                self.discoveredTopics[topic] = {"address": addr[0], "port": port, "registered": False}
+                #tell front end success
+                print("discover success ", self.discoveredTopics)
+            else:
+                #tell front end fail
+                print("discover fail")
+
     # def sendAck(self, addr, ackNum):
     #     ackPacket = self.createPacket("SEND_ACK", ackNum) #TODO: ADDR IS A PLACEHOLDER
     #     return self.controlSocket.sendto(ackPacket, (addr, c.CONTROL_PLANE_PORT))
 
     # by separating the receive calls, we dont have to encode so much information in our packets
     # packet structure: hash -- payload
-    def receive(self):
+    def receiveDiscovery(self):
         """
             Receives packets from the publisher and stores the information in the
             subscriber. If it does not receive anything after 5 seconds then it will simply return
@@ -136,6 +162,7 @@ class SubscriberManager:
                     break
 
                 rawData, addr = self.controlSocket.recvfrom(2048)
+                # If we receive our own packet we don't care
                 if addr[0] == self.local_ip:
                     continue
 
@@ -150,7 +177,7 @@ class SubscriberManager:
                     payload[1] = ast.literal_eval(payload[1])
                 
                 if payload[0] == c.TOPIC_DISCOVERY:
-                    self.discoverTopics(addr, payload[1])
+                    self.addDiscoveredTopic(addr, payload[1])
                 else:
                     print('something wrong you should not be here')
 
@@ -173,16 +200,6 @@ class SubscriberManager:
             #tell front end success
             print("register success", self.registeredTopics)
 
-    def discoverTopics(self, addr, payload):
-        if payload[0] != "":
-            [topic, port] = payload
-            if topic not in self.discoveredTopics:
-                self.discoveredTopics[topic] = {"address": addr[0], "port": port, "registered": False}
-                #tell front end success
-                print("discover success ", self.discoveredTopics)
-            else:
-                #tell front end fail
-                print("discover fail")
 
     def getDiscoveredTopics(self):
         """
@@ -190,27 +207,42 @@ class SubscriberManager:
         """
         return list(self.discoveredTopics.keys())
 
-    def start(self):
-        notListening = True
-        
-        while notListening:
+    def discoverTopics(self):
         # for i in range(c.RETRY_POLICY): # use timer to space discovery by 30s or smth
             self.sendTopicDiscovery()
             print('sent discovery')
-            received = self.receive()
+            received = self.receiveDiscovery()
+            # received is True if there is topics discovered
             if received:
                 print('this is my discover table', self.discoveredTopics)
-                print('this is my registered table', self.registeredTopics)
                 print("="*50)
             else:
                 # Call the front end to retrieve self.discoveredTopics
-                print("No topics were found, finish discovery")
-                break
-        # testing
-        print("Done")
+                print("No other topics were found, finish discovery")
+
+    def executeSlave(self, addr, port):
+        print("Created slave on ", addr, port)
+        slave = SubscriberSlave(addr, port)
+        while True:
+            img = slave.receive()
+            if self.frontEndListening == addr:
+                #TODO: Let front end display this image
+                print("Front end displays image")
+            
+
+    def start(self):
+        self.discoverTopics()
+        print(self.discoveredTopics)
+
         for topic in self.discoveredTopics:
             self.registerTopic(topic)
             self.sendTopicRegistration(topic)
+            dataPlaneThread = threading.Thread(target=self.executeSlave, 
+                    args=(self.discoveredTopics[topic]["address"], 
+                        self.discoveredTopics[topic]["port"]))
+            dataPlaneThread.daemon = True
+            dataPlaneThread.start()
+
             print('this is my discover table', self.discoveredTopics)
             print('this is my registered table', self.registeredTopics)
             print("="*50)
@@ -225,5 +257,3 @@ class SubscriberManager:
 if __name__ == "__main__":
     subscriber = SubscriberManager()
     subscriber.start()
-    subscriber.sendTopicDiscovery()
-    subscriber.receive()
