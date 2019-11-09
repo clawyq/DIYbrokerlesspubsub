@@ -18,16 +18,26 @@ class SubscriberSlave:
         self.dataSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.dataSocket.bind((addr, port))
         self.initialSeqNum = 0
+        self.buffer = ""
         self.image = ""
     
     def receive(self, type):
-        rawData, addr = self.controlSocket.recvfrom(2048)
-        hash, payload = rawData[0:c.HASHSIZE], rawData[c.HASHSIZE:]
+        hasMore = True
 
-        # if not corrupted packet
-        if c.verifyPacket(hash, payload):
-            payload = payload.decode()
-            payload = payload.split("  ")
+        while hasMore:
+            rawData, addr = self.controlSocket.recvfrom(2048)
+            hash, payload = rawData[0:c.HASHSIZE], rawData[c.HASHSIZE:]
+
+            # if not corrupted packet
+            if c.verifyPacket(hash, payload):
+                payload = payload.decode()
+                payload = payload.split("  ")
+                hasMore = self.handlePayload(payload)
+
+        recvImage = cv2.imdecode(recvData, cv2.IMREAD_COLOR)
+
+        cv2.imwrite(datetime.datetime.now().strftime('%Y-%m-%d%H:%M:%S') +
+                   '.jpg', recvImage)
         
         # ack logic goes here
         # upon finish, call returnImage
@@ -49,13 +59,20 @@ class SubscriberSlave:
 
         data = zlib.decompress(imageData)
         recvData = pickle.loads(data, fix_imports=True, encoding="bytes")
-        recvImage = cv2.imdecode(recvData, cv2.IMREAD_COLOR)
+        # recvImage = cv2.imdecode(recvData, cv2.IMREAD_COLOR)
 
         print(int.from_bytes(seqNumHeader, byteorder="big"))
         print(int.from_bytes(moreFlagHeader, byteorder="big"))
 
-        cv2.imwrite(datetime.datetime.now().strftime('%Y-%m-%d%H:%M:%S') +
-                    '.jpg', recvImage)
+        if seqNumHeader == self.initialSeqNum:
+            self.buffer += recvData
+            self.initialSeqNum += len(recvData)
+
+        return (moreFlagHeader == 0)
+
+
+        # cv2.imwrite(datetime.datetime.now().strftime('%Y-%m-%d%H:%M:%S') +
+        #            '.jpg', recvImage)
 
     def returnImage(self):
         # pass this to the manager for him to pass to the frontEnd
