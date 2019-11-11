@@ -7,20 +7,24 @@ import zlib
 import pickle
 import datetime
 import threading
+import logging
 
+# This class models a subscriber slave that registers on and  listens for
+# new data sent by the publisher on the data plane.
 class SubscriberSlave():
     def __init__(self, topic):
         self.topic = topic
         self.dataSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.currSeqNum = 0
 
+    # Actively listens for new image sent to the subscriber.
     def listenForNewImage(self):
         while True:
-            success, imageData = self.receive() #TODO: Fix bug, function does not return first time hence the next print statement does not get called. but subsequent attempts are fine.
-            print('returned!')
+            success, imageData = self.receive()
             if success:
                 self.storeImage(imageData)
 
+    # Registers with the publisher by sending a TOPIC_REGISTRATION packet.
     def registerTopic(self, addr):
         topicRegistrationPacket = createPacket(c.TOPIC_REGISTRATION, 0, 0, "")
 
@@ -33,6 +37,9 @@ class SubscriberSlave():
 
         return registerSuccess
 
+    # Ensures that data is susccessfully received.
+    # Returns whether the data was successfully received and
+    # a buffer containing the received data (a tuple).
     def receive(self):
         hasMore = True
         expectedSeqNum = 0
@@ -52,7 +59,7 @@ class SubscriberSlave():
                 return data == str(self.currSeqNum), None
             elif pktType == c.IMAGE:
                 if seqNum == expectedSeqNum:
-                    #print('successfully received image pkt seqnum: ' + str(seqNum))
+                    logging.info(' Successfully received image pkt seqnum: ' + str(seqNum))
                     buffer += data
 
                     expectedSeqNum += len(data)
@@ -60,9 +67,9 @@ class SubscriberSlave():
                 else:
                     self.ack(expectedSeqNum, addr)
             else:
-                print("unhandled packet type received on subscriber")
+                logging.error(' Unhandled packet type received on subscriber')
 
-        print('successfully received complete image payload')
+        logging.info(' Successfully received complete image payload')
         return (True, buffer)
 
 
@@ -70,9 +77,11 @@ class SubscriberSlave():
         ackPkt = createPacket(c.ACK, 0, self.currSeqNum, str(ackSeqNum))
         self.dataSocket.sendto(ackPkt, addr)
 
+    # Checks if the packet is the expected packet.
     def checkValidPacket(self, expectedSeqNum, actualSeqNum):
         return expectedSeqNum == actualSeqNum
 
+    # Saves the image to the local machine, in the format <topic>-<datetime>.jpg
     def storeImage(self, imageBytes):
         originalFrames = zlib.decompress(imageBytes)
         recvData = pickle.loads(originalFrames, fix_imports=True, encoding="bytes")
@@ -84,12 +93,16 @@ class SubscriberSlave():
                    + datetime.datetime.now().strftime('%Y-%m-%d%H-%M-%S') \
                    + '.jpg'
         if not cv2.imwrite(os.path.join(ROOT_DIR, 'images', filename), recvImage):
-            print('failed to save image')
+            logging.error(' Failed to save image')
+        else:
+            logging.info(' Image saved!')
 
 
+# This class models a subscriber that listens on the control plane.
+# Upon detecting new publisher, it will spawn new SubscriberSlave to
+# register and receive information from that publisher.
 class SubscriberManager:
     def __init__(self):
-        # self.meaddress = socket.gethostbyname(socket.gethostname())
         self.local_ip = self._getLocalIP()
         self.controlSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.controlSocket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -97,13 +110,6 @@ class SubscriberManager:
         self.controlSocket.settimeout(5)
         self.controlSocket.bind((self.local_ip, c.CONTROL_PLANE_PORT))
 
-        # socket objects to listen to
-        #self.socketsToListenTo = [self.controlSocket]
-
-        # keeps track of topic: {addr, port}
-        #self.registeredTopics = {}
-
-        # keeps track of what is available, mainly to show frontend topic: {address, port, registered?}
         self.discoveredTopics = {}
 
         self.lock = threading.Lock()
@@ -119,12 +125,13 @@ class SubscriberManager:
 
         return ip
 
-    # sending tables - if no one replies, default {}. iF a publisher replies, update my table
+    # Broadcasts a TOPIC_DISCOVERY (query) packet to discover any new publishers on the network.
     def sendTopicDiscovery(self):
         topicDiscoveryPacket = createPacket(c.TOPIC_DISCOVERY, 0, 0, "")
         return self.controlSocket.sendto(topicDiscoveryPacket,
                                          ('<broadcast>', c.CONTROL_PLANE_PORT))
 
+    # Adds information on a newly discovered topic.
     def addDiscoveredTopic(self, addr, topic):
         if topic != "":
             if topic not in self.discoveredTopics:
@@ -133,13 +140,13 @@ class SubscriberManager:
                                                 "registered": False,
                                                 "slave": None}
                 #tell front end success
-                print("discover success ", self.discoveredTopics)
+                logging.info(" Topic Discovery success!\n ", self.discoveredTopics)
             else:
                 #tell front end fail
-                print("discover fail")
+                logging.info(" Topic Discovery failed")
 
-    # by separating the receive calls, we dont have to encode so much information in our packets
-    # packet structure: hash -- payload
+    # Listens for TOPIC_INFO replies from publishers on the network,
+    # in response to the TOPIC_DISCOVERY packet sent earlier.
     def receiveDiscovery(self):
         """
             Receives packets from the publisher and stores the information in the
@@ -169,7 +176,7 @@ class SubscriberManager:
                     if typeFlag == c.TOPIC_INFO:
                         self.addDiscoveredTopic(addr, data)
                     else:
-                        print('something wrong you should not be here')
+                        logging.error(' Something wrong you should not be here')
 
         except socket.timeout:
             # Case where there is nothing I will just time out
@@ -179,34 +186,33 @@ class SubscriberManager:
         # Indicates the end of time allocated
         return True
 
+    # Returns the discovered topics in a form of a list
     def getDiscoveredTopics(self):
-        """
-            Returns the discovered topics in a form of a list
-        """
         return list(self.discoveredTopics.keys())
 
+    # Scans the local network for new publishers/topics to register to.
     def discoverTopics(self):
-        print("start topic discovery")
+        logging.info(" Start topic discovery...")
         # for i in range(c.RETRY_POLICY): # use timer to space discovery by 30s or smth
         self.sendTopicDiscovery()
-        print('sent discovery')
+        logging.info(' Sent discovery')
         received = self.receiveDiscovery()
         # received is True if there is topics discovered
         if received:
-            print('this is my discover table', self.discoveredTopics)
-            print("="*50)
+            logging.info(' This is my discover table\n ', self.discoveredTopics)
         else:
-            print("No new topics were found")
+            # Call the front end to retrieve self.discoveredTopics
+            logging.info(" No new topics were found")
 
-        print("end of discovery")
+        logging.info(" End of discovery")
 
     def executeSlave(self, topic, addr):
-        print("Created slave to listen on topic: " + topic)
+        logging.info(" created slave to listen on topic: " + topic)
         slave = SubscriberSlave(topic)
         registerSuccess = slave.registerTopic(addr)
 
         if not registerSuccess:
-            print("Slave failed to register to topic [" + topic + "] at " + str(addr))
+            logging.info(" slave failed to register to topic [" + topic + "] at " + str(addr))
             self.lock.acquire()
             self.discoveredTopics.pop(topic)
             self.lock.release()
@@ -237,16 +243,18 @@ class SubscriberManager:
 
 # Packet has the following structure:
 # ----------------------------------------------------------------
-#   type flag (1 byte) | 'MORE' flag (1 byte) | seqNum (4 bytes)
+#         type flag (3 bytes)         |    'MORE' flag (1 byte)
 # ----------------------------------------------------------------
-#                      data (570 bytes max)
+#                        seqNum (4 bytes)
+# ----------------------------------------------------------------
+#                              data
 # ----------------------------------------------------------------
 #
 # typeFlag: indicates type of content in the packet
 # seqNum: starting sequence number of the data
 # moreFlag: 1 if there is a subsequent packet, 0 else
 def createPacket(type, more, seqNum, data):
-    typeFlagInBytes = int.to_bytes(type, byteorder="big", length=1)
+    typeFlagInBytes = int.to_bytes(type, byteorder="big", length=3)
     moreFlagInBytes = int.to_bytes(more, byteorder="big", length=1)
     seqNumInBytes = int.to_bytes(seqNum, byteorder="big", length=4)
 
@@ -257,11 +265,15 @@ def createPacket(type, more, seqNum, data):
     hash = c.generateHash(utfPayload)
     return hash + utfPayload
 
+
+# Process the payload and returns the individual fields as a tuple.
+#
+# Precondition: payload excludes hash value
 def handlePayload(payload):
-    typeFlag = int.from_bytes(payload[:1], byteorder="big")
-    moreFlag = int.from_bytes(payload[1:2], byteorder="big")
-    seqNum = int.from_bytes(payload[2:6], byteorder="big")
-    data = payload[6:]
+    typeFlag = int.from_bytes(payload[:3], byteorder="big")
+    moreFlag = int.from_bytes(payload[3:4], byteorder="big")
+    seqNum = int.from_bytes(payload[4:8], byteorder="big")
+    data = payload[8:]
 
     if typeFlag != c.IMAGE:
         data = data.decode()
@@ -269,5 +281,7 @@ def handlePayload(payload):
     return typeFlag, moreFlag, seqNum, data
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+
     subscriber = SubscriberManager()
     subscriber.start()
