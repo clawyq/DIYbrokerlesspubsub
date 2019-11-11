@@ -9,8 +9,11 @@ import collections
 
 from subscriber import SubscriberManager, SubscriberSlave
 
+MAX_W = 500
+MAX_H = 500
+
 def genFakeTopics():
-    numTopics = randint(5, 5)
+    numTopics = randint(2, 5)
     topics = ["t" + str(n) for n in range(1, numTopics+1)]
     return topics
 
@@ -24,36 +27,37 @@ class mainFrame(Frame):
 
     def __init__(self):
         super().__init__()
-        self.canvas = tk.Canvas(self, height=200, width=200)
+        self.canvas = tk.Canvas(self, height=500, width=500)
         self.img = None
         self.image_id = self.canvas.create_image(200, 200, image=self.img)
         self.image_path = "Test"
         
         self.variable = StringVar(self)
         self.variable.set("t1")
-        # self.variable.trace("w", self.selectTopic)
-        # self.discoverMenu = OptionMenu(self, self.variable)
-        # self.topicMenu = OptionMenu(self, self.variable)
+        self.buttons = []
 
         self.v = set()
         self.topicQueues = collections.defaultdict(collections.deque)
         self.initUI()
 
         self.subscriber = SubscriberManager()
-        # self.subscriber.start()
-        # self.subscriber.sendTopicDiscovery()
-        # self.subscriber.receive()
 
 
     def showImage(self, path):
         print("Showing Image")
-        pil_img = Image.open(path).resize((400, 400), Image.ANTIALIAS)
+        pil_img = Image.open(path)
+        pil_img.thumbnail((500, 500), Image.ANTIALIAS)
+        # resizeRatio = min(MAX_W / pil_img.width, MAX_H / pil_img.height)
+        # pil_img.resize((500, 500), Image.ANTIALIAS)
         img = ImageTk.PhotoImage(pil_img)
+        
+        
         # self.canvas.itemconfigure(self.image_id, image=img)
         self.canvas.create_image(200, 200, image=img)
         self.canvas.image = img
     
     def discover(self):
+        self.destroyButtons()
         print("Starting discovery...")
         """
             Sends discovery request to all subscribers. 
@@ -76,7 +80,7 @@ class mainFrame(Frame):
         return lambda: self.variable.set(topic)
 
     def generateButtons(self, topics):
-        r = 3
+        r = 1
         c = 0
         buttons = []
         for t in topics:
@@ -151,13 +155,11 @@ class mainFrame(Frame):
         self.rowconfigure(3, pad=3)
         self.rowconfigure(4, pad=3)
 
-        cls = Button(self, text="Cls")  
-        cls.grid(row=1, column=0)
         bck = Button(self, text="Discover", command=self.discover)
-        bck.grid(row=1, column=1)
+        bck.grid(row=0, column=0)
         clo = Button(self, text="Destory", command=self.destroyButtons)
-        clo.grid(row=1, column=3)
-        self.canvas.grid(row=1, column=4)   
+        clo.grid(row=0, column=1)
+        self.canvas.grid(row=0, column=4, columnspan=10, rowspan=10)   
         # self.discoverMenu.grid(row=1, column=4)
         # self.topicMenu.grid(row=1, column=5)
 

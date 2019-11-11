@@ -8,9 +8,13 @@ import pickle
 import datetime
 import threading
 
-class SubscriberSlave():
-    def __init__(self, topic):
-        self.topic = topic
+from select import select
+from time import sleep
+from random import randint as ri
+from copy import deepcopy
+
+class SubscriberSlave:
+    def __init__(self, addr, port):
         self.dataSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.currSeqNum = 0
 
@@ -66,9 +70,8 @@ class SubscriberSlave():
         return (True, buffer)
 
 
-    def ack(self, ackSeqNum, addr):
-        ackPkt = createPacket(c.ACK, 0, self.currSeqNum, str(ackSeqNum))
-        self.dataSocket.sendto(ackPkt, addr)
+        # Will return true if there is more data to be received
+        return (moreFlagHeader == 1) or (seqNumHeader != self.initialSeqNum)
 
     def checkValidPacket(self, expectedSeqNum, actualSeqNum):
         return expectedSeqNum == actualSeqNum
