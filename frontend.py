@@ -27,7 +27,7 @@ class mainFrame(Frame):
 
     def __init__(self):
         super().__init__()
-        self.canvas = tk.Canvas(self, height=500, width=500)
+        self.canvas = tk.Canvas(self, height=500, width=500, bg='white')
         self.img = None
         self.image_id = self.canvas.create_image(200, 200, image=self.img)
         self.image_path = "Test"
@@ -39,14 +39,23 @@ class mainFrame(Frame):
         self.v = set()
         self.topicQueues = collections.defaultdict(collections.deque)
 
-        self.status = tk.Label(self, text="Waiting for input.", font="Helvetica 30")
-
+        self.status = tk.Label(self, text="Waiting for input.", font="Helvetica 30", bg='white')
         self.initUI()
 
-        self.subscriber = SubscriberManager()
-        self.subscriber.start()
+        # self.subscriber = SubscriberManager()
+        # self.subscriber.start()
 
-        # self.configure(background="white")
+        
+
+
+    def getTopics(self):
+        topics = []
+        print(list(self.topicQueues.keys()))
+
+        for topic in list(self.topicQueues.keys()):
+            if not topic == 'None': 
+                topics.append(topic)
+        return topics
 
 
     def showImage(self, path):
@@ -64,7 +73,6 @@ class mainFrame(Frame):
     
     def discover(self):
         self.destroyButtons()
-        print("Starting discovery...")
         """
             Sends discovery request to all subscribers. 
             
@@ -75,10 +83,10 @@ class mainFrame(Frame):
             Generates Button for every topic, when button is pressed, displays 'channel'.
             
             Returns list of topics.
-
         """
-        
-        topics = self.subscriber.getDiscoveredTopics()
+        topics = self.getTopics()
+        print(topics)
+        # topics = self.subscriber.getDiscoveredTopics()
         self.pack()
         self.buttons = self.generateButtons(topics)
 
@@ -124,6 +132,7 @@ class mainFrame(Frame):
         # otherwise, cycle though images in 30 second cycle, 5 seconds each
         try:
             print("Refreshing...")
+            self.discover()
             self.addNewImagesToQueues()
             topic = self.variable.get()
             q = self.topicQueues[topic]
@@ -145,8 +154,10 @@ class mainFrame(Frame):
 
         self.master.title("Frontend")
 
+
+        Style().configure("TFrame", background="white")
         Style().configure("TButton", padding=(0, 5, 0, 5),
-            font='serif 10')
+            font='serif 10', foreground='white', background="#1976D2")
 
         self.columnconfigure(0, pad=3)
         self.columnconfigure(1, pad=3)
@@ -160,15 +171,12 @@ class mainFrame(Frame):
         self.rowconfigure(3, pad=3)
         self.rowconfigure(4, pad=3)
 
-        bck = Button(self, text="Discover", command=self.discover)
-        bck.grid(row=0, column=0)
-        clo = Button(self, text="Destory", command=self.destroyButtons)
-        clo.grid(row=0, column=1)
+
         self.canvas.grid(row=1, column=4, columnspan=10, rowspan=10)
         # self.discoverMenu.grid(row=1, column=4)
         # self.topicMenu.grid(row=1, column=5)
 
-        self.status.grid(row=0, column=4)
+        self.status.grid(row=0, column=4, sticky='ew', columnspan=4)
 
         self.pack()
 

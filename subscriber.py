@@ -83,7 +83,7 @@ class SubscriberSlave():
                    + '-' \
                    + datetime.datetime.now().strftime('%Y-%m-%d%H-%M-%S') \
                    + '.jpg'
-        if not cv2.imwrite(os.path.join(ROOT_DIR, 'images_recv', filename), recvImage):
+        if not cv2.imwrite(os.path.join(ROOT_DIR, 'images', filename), recvImage):
             print('failed to save image')
 
 
