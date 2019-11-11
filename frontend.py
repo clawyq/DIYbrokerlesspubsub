@@ -18,7 +18,7 @@ def genFakeTopics():
     return topics
 
 def nextGridNums(r, c):
-    if c == 2:
+    if c == 1:
         return r + 1, 0
     else:
         return r, c + 1
@@ -33,14 +33,20 @@ class mainFrame(Frame):
         self.image_path = "Test"
         
         self.variable = StringVar(self)
-        self.variable.set("t1")
+        self.variable.set("None")
         self.buttons = []
 
         self.v = set()
         self.topicQueues = collections.defaultdict(collections.deque)
+
+        self.status = tk.Label(self, text="Waiting for input.", font="Helvetica 30")
+
         self.initUI()
 
         self.subscriber = SubscriberManager()
+        self.subscriber.start()
+
+        # self.configure(background="white")
 
 
     def showImage(self, path):
@@ -72,7 +78,7 @@ class mainFrame(Frame):
 
         """
         
-        topics = genFakeTopics()
+        topics = self.subscriber.getDiscoveredTopics()
         self.pack()
         self.buttons = self.generateButtons(topics)
 
@@ -84,12 +90,12 @@ class mainFrame(Frame):
         c = 0
         buttons = []
         for t in topics:
-            print(f'setting button topic to {t}')
+            print('setting button topic to {}'.format(t))
             funct = self.setSpecVar(t)
             b = Button(self, text=t, command=funct)
             b.grid(row=r, column=c)
             r, c = nextGridNums(r, c)
-            print(f"r: {r} c: {c}")
+            print("r: {} c: {}".format(r,c))
             buttons.append(b)
 
         self.pack()
@@ -108,7 +114,7 @@ class mainFrame(Frame):
         for path in list(os.walk('images'))[0][2]:
             if path not in self.v:
                 topic = self.getTopic(path)
-                print(f'adding {path} to queue {topic}')
+                print('adding {} to queue {}'.format(path, topic))
                 self.topicQueues[topic].append(path)
                 self.v.add(path)
 
@@ -127,11 +133,9 @@ class mainFrame(Frame):
                 pass
             else:
                 img_path = "images/"+ q.pop()
-                print(f"Showing image {img_path}")
-                # pil_img = Image.open(img_path).resize((200, 200), Image.ANTIALIAS)
-                # img = ImageTk.PhotoImage(pil_img)
-                # self.canvas.itemconfigure(self.image_id, image=img)
+                print("Showing image {}".format(img_path))
                 self.showImage(img_path)
+                self.status["text"] = "Showing images from [{}]\n Images left in queue: {}".format(topic, len(q))
         except IOError:  # missing or corrupt image file
             img = None
         # repeat every half sec
@@ -148,6 +152,7 @@ class mainFrame(Frame):
         self.columnconfigure(1, pad=3)
         self.columnconfigure(2, pad=3)
         self.columnconfigure(3, pad=3)
+        self.columnconfigure(4, pad=3)
 
         self.rowconfigure(0, pad=3)
         self.rowconfigure(1, pad=3)
@@ -159,9 +164,11 @@ class mainFrame(Frame):
         bck.grid(row=0, column=0)
         clo = Button(self, text="Destory", command=self.destroyButtons)
         clo.grid(row=0, column=1)
-        self.canvas.grid(row=0, column=4, columnspan=10, rowspan=10)   
+        self.canvas.grid(row=1, column=4, columnspan=10, rowspan=10)
         # self.discoverMenu.grid(row=1, column=4)
         # self.topicMenu.grid(row=1, column=5)
+
+        self.status.grid(row=0, column=4)
 
         self.pack()
 
