@@ -8,13 +8,9 @@ import pickle
 import datetime
 import threading
 
-from select import select
-from time import sleep
-from random import randint as ri
-from copy import deepcopy
-
-class SubscriberSlave:
-    def __init__(self, addr, port):
+class SubscriberSlave():
+    def __init__(self, topic):
+        self.topic = topic
         self.dataSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.currSeqNum = 0
 
@@ -70,8 +66,9 @@ class SubscriberSlave:
         return (True, buffer)
 
 
-        # Will return true if there is more data to be received
-        return (moreFlagHeader == 1) or (seqNumHeader != self.initialSeqNum)
+    def ack(self, ackSeqNum, addr):
+        ackPkt = createPacket(c.ACK, 0, self.currSeqNum, str(ackSeqNum))
+        self.dataSocket.sendto(ackPkt, addr)
 
     def checkValidPacket(self, expectedSeqNum, actualSeqNum):
         return expectedSeqNum == actualSeqNum
@@ -86,7 +83,7 @@ class SubscriberSlave:
                    + '-' \
                    + datetime.datetime.now().strftime('%Y-%m-%d%H-%M-%S') \
                    + '.jpg'
-        if not cv2.imwrite(os.path.join(ROOT_DIR, 'images', filename), recvImage):
+        if not cv2.imwrite(os.path.join(ROOT_DIR, 'images_recv', filename), recvImage):
             print('failed to save image')
 
 
@@ -97,7 +94,7 @@ class SubscriberManager:
         self.controlSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.controlSocket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         self.controlSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.controlSocket.settimeout(60)
+        self.controlSocket.settimeout(5)
         self.controlSocket.bind((self.local_ip, c.CONTROL_PLANE_PORT))
 
         # socket objects to listen to
@@ -151,13 +148,11 @@ class SubscriberManager:
             ** Currently only does registration **
         """
         start = time.time()
-        self.controlSocket.settimeout(5)
         try:
             while True:
                 # If the total time exceeds 5 seconds we end
                 end = time.time()
                 if end - start > 5:
-                    self.controlSocket.settimeout(60)
                     break
 
                 rawData, addr = self.controlSocket.recvfrom(2048)
@@ -201,7 +196,6 @@ class SubscriberManager:
             print('this is my discover table', self.discoveredTopics)
             print("="*50)
         else:
-            # Call the front end to retrieve self.discoveredTopics
             print("No new topics were found")
 
         print("end of discovery")
