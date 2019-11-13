@@ -7,7 +7,7 @@ import time
 import os
 import collections
 
-from subscriber import SubscriberManager, SubscriberSlave
+from subscriber import SubscriberManager
 
 MAX_W = 500
 MAX_H = 500
@@ -27,9 +27,9 @@ class mainFrame(Frame):
 
     def __init__(self):
         super().__init__()
-        self.canvas = tk.Canvas(self, height=500, width=500, bg='white')
+        self.canvas = tk.Canvas(self, height=1024, width=1600, bg='white')
         self.img = None
-        self.image_id = self.canvas.create_image(200, 200, image=self.img)
+        self.image_id = self.canvas.create_image(500, 500, image=self.img)
         self.image_path = "Test"
         
         self.variable = StringVar(self)
@@ -39,14 +39,10 @@ class mainFrame(Frame):
         self.v = set()
         self.topicQueues = collections.defaultdict(collections.deque)
 
-        self.status = tk.Label(self, text="Waiting for input.", font="Helvetica 30", bg='white')
+        self.status = tk.Label(self, text="Discover my PI", font="roboto 34", bg='white')
         self.initUI()
 
-        # self.subscriber = SubscriberManager()
-        # self.subscriber.start()
-
-        
-
+        self.subscriber = SubscriberManager()
 
     def getTopics(self):
         topics = []
@@ -68,7 +64,7 @@ class mainFrame(Frame):
         
         
         # self.canvas.itemconfigure(self.image_id, image=img)
-        self.canvas.create_image(200, 200, image=img)
+        self.canvas.create_image(500, 500, image=img)
         self.canvas.image = img
     
     def discover(self):
@@ -94,7 +90,7 @@ class mainFrame(Frame):
         return lambda: self.variable.set(topic)
 
     def generateButtons(self, topics):
-        r = 1
+        r = 2
         c = 0
         buttons = []
         for t in topics:
@@ -144,20 +140,27 @@ class mainFrame(Frame):
                 img_path = "images/"+ q.pop()
                 print("Showing image {}".format(img_path))
                 self.showImage(img_path)
-                self.status["text"] = "Showing images from [{}]\n Images left in queue: {}".format(topic, len(q))
+                self.status["text"] = "Showing images from [{}]".format(topic)
         except IOError:  # missing or corrupt image file
             img = None
         # repeat every half sec
-        canvas.after(1000, self.refresh_image, self.canvas, self.img, self.image_path, self.image_id)  
+        canvas.after(5000, self.refresh_image, self.canvas, self.img, self.image_path, self.image_id)  
+
+    def subscriberSendDiscovery(self):
+        self.subscriber.discoverTopics()
+        self.destroyButtons()
+        discoveredTopics = self.subscriber.getDiscoveredTopics()
+        if discoveredTopics:
+            self.buttons = self.generateButtons(discoveredTopics)
+            self.subscriber.registerTopics()
 
     def initUI(self):
 
         self.master.title("Frontend")
 
-
         Style().configure("TFrame", background="white")
-        Style().configure("TButton", padding=(0, 5, 0, 5),
-            font='serif 10', foreground='white', background="#1976D2")
+        Style().configure("TButton", padding=(3, 7, 3, 7),
+            font='roboto 20', foreground='white', background="#1976D2")
 
         self.columnconfigure(0, pad=3)
         self.columnconfigure(1, pad=3)
@@ -172,14 +175,16 @@ class mainFrame(Frame):
         self.rowconfigure(4, pad=3)
 
 
-        self.canvas.grid(row=1, column=4, columnspan=10, rowspan=10)
+        self.canvas.grid(row=2, column=4, columnspan=10, rowspan=10)
         # self.discoverMenu.grid(row=1, column=4)
         # self.topicMenu.grid(row=1, column=5)
 
-        self.status.grid(row=0, column=4, sticky='ew', columnspan=4)
+        discoverButton = Button(self, text="Discover", command=self.subscriberSendDiscovery)
+        discoverButton.grid(row=1)
+
+        self.status.grid(row=1, column=4, sticky='ew', columnspan=4)
 
         self.pack()
-
 
 def main():
 
@@ -187,7 +192,6 @@ def main():
     app = mainFrame()
     app.refresh_image(app.canvas, app.img, app.image_path, app.image_id)
     root.mainloop()
-
 
 if __name__ == '__main__':
     main()

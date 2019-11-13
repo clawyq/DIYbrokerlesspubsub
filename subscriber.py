@@ -180,7 +180,6 @@ class SubscriberManager:
 
         except socket.timeout:
             # Case where there is nothing I will just time out
-            self.controlSocket.settimeout(60)
             return False
 
         # Indicates the end of time allocated
@@ -192,19 +191,19 @@ class SubscriberManager:
 
     # Scans the local network for new publishers/topics to register to.
     def discoverTopics(self):
-        logging.info(" Start topic discovery...")
+        print(" Start topic discovery...")
         # for i in range(c.RETRY_POLICY): # use timer to space discovery by 30s or smth
         self.sendTopicDiscovery()
-        logging.info(' Sent discovery')
+        print(' Sent discovery')
         received = self.receiveDiscovery()
         # received is True if there is topics discovered
         if received:
-            logging.info(' This is my discover table\n ', self.discoveredTopics)
+            print(' This is my discover table\n ', self.discoveredTopics)
         else:
             # Call the front end to retrieve self.discoveredTopics
-            logging.info(" No new topics were found")
+            print(" No new topics were found")
 
-        logging.info(" End of discovery")
+        print(" End of discovery")
 
     def executeSlave(self, topic, addr):
         logging.info(" created slave to listen on topic: " + topic)
@@ -219,24 +218,44 @@ class SubscriberManager:
             return
         while True:
             slave.listenForNewImage()
+    
+    def registerTopics(self):
+        self.lock.acquire()
+        for topic in self.discoveredTopics:
+            if not self.discoveredTopics[topic]["registered"]:
+                dataPlaneThread = threading.Thread(target=self.executeSlave,
+                                                    args=(topic,
+                                                            (self.discoveredTopics[topic]["address"],
+                                                            self.discoveredTopics[topic]["port"])))
+                dataPlaneThread.daemon = True
+                dataPlaneThread.start()
+
+                self.discoveredTopics[topic]["registered"] = True
+                self.discoveredTopics[topic]["slave"] = dataPlaneThread.getName()
+        self.lock.release()
+
+    def registerTopic(self, topic):
+        self.lock.acquire()
+        if topic in self.discoveredTopics:
+            if not self.discoveredTopics[topic]["registered"]:
+                dataPlaneThread = threading.Thread(target=self.executeSlave,
+                                                    args=(topic,
+                                                            (self.discoveredTopics[topic]["address"],
+                                                            self.discoveredTopics[topic]["port"])))
+                dataPlaneThread.daemon = True
+                dataPlaneThread.start()
+
+                self.discoveredTopics[topic]["registered"] = True
+                self.discoveredTopics[topic]["slave"] = dataPlaneThread.getName()
+
+        self.lock.release()
+
+        
 
     def start(self):
         while True:
             self.discoverTopics()
-
-            self.lock.acquire()
-            for topic in self.discoveredTopics:
-                if not self.discoveredTopics[topic]["registered"]:
-                    dataPlaneThread = threading.Thread(target=self.executeSlave,
-                                                       args=(topic,
-                                                             (self.discoveredTopics[topic]["address"],
-                                                              self.discoveredTopics[topic]["port"])))
-                    dataPlaneThread.daemon = True
-                    dataPlaneThread.start()
-
-                    self.discoveredTopics[topic]["registered"] = True
-                    self.discoveredTopics[topic]["slave"] = dataPlaneThread.getName()
-            self.lock.release()
+            self.registerTopics()
 
             time.sleep(c.REFRESH_RATE)
 
