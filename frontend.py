@@ -41,13 +41,7 @@ class mainFrame(Frame):
 
         self.status = tk.Label(self, text="Waiting for input.", font="Helvetica 30", bg='white')
         self.initUI()
-
-        # self.subscriber = SubscriberManager()
-        # self.subscriber.start()
-
         
-
-
     def getTopics(self):
         topics = []
         print(list(self.topicQueues.keys()))
@@ -62,31 +56,13 @@ class mainFrame(Frame):
         print("Showing Image")
         pil_img = Image.open(path)
         pil_img.thumbnail((500, 500), Image.ANTIALIAS)
-        # resizeRatio = min(MAX_W / pil_img.width, MAX_H / pil_img.height)
-        # pil_img.resize((500, 500), Image.ANTIALIAS)
         img = ImageTk.PhotoImage(pil_img)
-        
-        
-        # self.canvas.itemconfigure(self.image_id, image=img)
         self.canvas.create_image(200, 200, image=img)
         self.canvas.image = img
     
     def discover(self):
         self.destroyButtons()
-        """
-            Sends discovery request to all subscribers. 
-            
-            From topics:
-                check for a new image every 30 seconds
-                if there is an image, add it to list. 
-
-            Generates Button for every topic, when button is pressed, displays 'channel'.
-            
-            Returns list of topics.
-        """
         topics = self.getTopics()
-        print(topics)
-        # topics = self.subscriber.getDiscoveredTopics()
         self.pack()
         self.buttons = self.generateButtons(topics)
 
@@ -127,9 +103,6 @@ class mainFrame(Frame):
                 self.v.add(path)
 
     def refresh_image(self, canvas, img, image_path, image_id):
-    
-        # if no images in queue, show blank
-        # otherwise, cycle though images in 30 second cycle, 5 seconds each
         try:
             print("Refreshing...")
             self.discover()
@@ -148,11 +121,11 @@ class mainFrame(Frame):
         except IOError:  # missing or corrupt image file
             img = None
         # repeat every half sec
-        canvas.after(1000, self.refresh_image, self.canvas, self.img, self.image_path, self.image_id)  
+        canvas.after(500, self.refresh_image, self.canvas, self.img, self.image_path, self.image_id)  
 
     def initUI(self):
 
-        self.master.title("Frontend")
+        self.master.title("CameraView")
 
 
         Style().configure("TFrame", background="white")
@@ -173,9 +146,6 @@ class mainFrame(Frame):
 
 
         self.canvas.grid(row=1, column=4, columnspan=10, rowspan=10)
-        # self.discoverMenu.grid(row=1, column=4)
-        # self.topicMenu.grid(row=1, column=5)
-
         self.status.grid(row=0, column=4, sticky='ew', columnspan=4)
 
         self.pack()
