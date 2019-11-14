@@ -147,12 +147,14 @@ class mainFrame(Frame):
         canvas.after(5000, self.refresh_image, self.canvas, self.img, self.image_path, self.image_id)  
 
     def subscriberSendDiscovery(self):
-        self.subscriber.discoverTopics()
         self.destroyButtons()
+        self.subscriber.discoverTopics()
         discoveredTopics = self.subscriber.getDiscoveredTopics()
         if discoveredTopics:
-            self.buttons = self.generateButtons(discoveredTopics)
+            self.status['text'] = "Discovered topics"
             self.subscriber.registerTopics()
+        else:
+            self.status['text'] = "No publisher found"
 
     def initUI(self):
 
