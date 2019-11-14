@@ -151,7 +151,7 @@ class mainFrame(Frame):
         self.subscriber.discoverTopics()
         discoveredTopics = self.subscriber.getDiscoveredTopics()
         if discoveredTopics:
-            self.status['text'] = "Discovered topics"
+            self.status['text'] = "Discovered topics: {}".format(discoveredTopics)
             self.subscriber.registerTopics()
         else:
             self.status['text'] = "No publisher found"

@@ -163,6 +163,7 @@ class SubscriberManager:
                     break
 
                 rawData, addr = self.controlSocket.recvfrom(2048)
+                print(addr)
                 # If we receive our own packet we don't care
                 if addr[0] == self.local_ip:
                     continue
@@ -176,6 +177,7 @@ class SubscriberManager:
                     if typeFlag == c.TOPIC_INFO:
                         self.addDiscoveredTopic(addr, data)
                     else:
+                        print(typeFlag)
                         logging.error(' Something wrong you should not be here')
 
         except socket.timeout:
